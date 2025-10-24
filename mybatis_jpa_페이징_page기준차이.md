@@ -1,41 +1,60 @@
-# Mybatis vs Jpa Page 기준값 차이
+# MyBatis vs JPA — Page와 Offset 기준 차이
 
-MyBatis 와 JPA 의 페이징 offset 기준이 다릅니다.
-
-### ⚙️ 차이 요약
-
-구분시작 기준예시 (`page=1`, `size=10`)비고
-
-**MyBatis / SQL 직접 작성 1부터 시작**
-`OFFSET = (page - 1) * size = 0`보통 사람이 보는 "1페이지" 기준
-
-**JPA / Spring Data JPA 0부터 시작**
-`PageRequest.of(0, 10)` → 1페이지 내부적으로 0 기반 인덱스 사용
+> **“page가 다른 거지, offset 계산 방식은 결국 page에 따라 달라지는 결과”** 입니다.
 
 
+### 핵심 개념 먼저 정리
 
-### 💡 예시로 보면
-✅ MyBatis
-```SELECT * FROM payment
-LIMIT #{size} OFFSET #{(page - 1) * size}
+| 용어 | 의미 |
+|------|------|
+| **page** | “현재 몇 번째 페이지인가?”를 나타내는 **입력값** |
+| **size (limit)** | “한 페이지당 몇 개 보여줄까?” |
+| **offset** | “앞에서 몇 개를 건너뛸까?” → SQL `OFFSET` 절로 사용됨 |
+
+### 비교 표
+
+| 구분 | page 시작 값 | offset 계산식 | 첫 페이지(offset=0) 되려면 |
+|------|---------------|----------------|----------------------------|
+| **MyBatis / SQL 직접 작성** | `1`부터 | `(page - 1) * size` | `page = 1` |
+| **JPA (Spring Data JPA)** | `0`부터 | `page * size` | `page = 0` |
+
+
+offset = page * size   (혹은 (page - 1) * size) 계산식에서 `page`가 0부터 시작하느냐, 1부터 시작하느냐**가 달라지는 거예요.
+
+### MyBatis (SQL)
+```sql
+SELECT *
+FROM payment
+LIMIT #{size} OFFSET #{(page - 1) * size};
 ```
 
-➡️ `page = 1` → OFFSET 0
-➡️ `page = 2` → OFFSET 10
-즉, `page`가 **1부터 시작**한다고 보고 계산합니다.
 
-### ✅ JPA (Spring Data)
-```
-PageRequest pageRequest = PageRequest.of(0, 10);
-```
 
-➡️ 첫 페이지를 `0`으로 설정해야 **1페이지 결과**가 나옵니다.
-즉, `page`가 **0부터 시작**한다고 보는 구조예요.
 
-### ✅ 결론
-항목offset/page 시작 값
-MyBatis (SQL)`1` 페이지부터 시작
-JPA (`PageRequest`)`0` 페이지부터 시작
-그래서 같은 “첫 페이지”를 의미하더라도
-MyBatis에서는 `page=1`,
-JPA에서는 `page=0` 으로 설정해야 맞습니다.
+## 데이터 예시
+- **MyBatis** → 사람이 보는 **1페이지부터 시작** → `(1 - 1) * 10 = 0`  
+- **JPA** → 내부적으로 **0페이지부터 시작** → `(0 * 10 = 0)`
+
+
+| 페이지 의미 | MyBatis에서의 page | JPA에서의 page |
+|--------------|---------------------|----------------|
+| 첫 번째 페이지 | 1 | 0 |
+| 두 번째 페이지 | 2 | 1 |
+| 세 번째 페이지 | 3 | 2 |
+
+
+> “page 번호 기준이 다르기 때문에 offset 계산 결과가 달라지는 것” 이지, offset 공식이 다른 건 아님.
+
+
+## 정리
+
+| 항목 | 차이 설명 |
+|------|------------|
+| **page** | MyBatis는 `1`부터, JPA는 `0`부터 시작 |
+| **offset 계산식** | 공식은 같지만, `page` 시작 기준이 달라서 결과가 달라짐 |
+| **실제 차이점 요약** | `page` 기준 차이로 인해 “첫 페이지 offset 계산값”이 달라짐 |
+
+
+## ✅ 결론
+Offset 자체의 개념은 동일하지만,
+**page가 0부터냐 1부터냐**가 달라서 계산된 offset 값이 다르게 나오는 거예요.
